@@ -4,6 +4,10 @@ on:
   push:
     branches: [ main ]
   workflow_dispatch:
+  schedule:
+    - cron: '*/5 3-10 * * 1-5'  # Every 5 minutes during market hours (9:00 AM - 3:30 PM IST, Mon-Fri)
+    - cron: '*/15 0-2,11-23 * * 1-5'  # Every 15 minutes outside market hours on weekdays
+    - cron: '*/30 * * * 0,6'          # Every 30 minutes on weekends
 
 jobs:
   deploy:
