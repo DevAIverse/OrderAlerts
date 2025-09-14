@@ -1,0 +1,39 @@
+name: Deploy Order Alerts
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Run Order Alerts
+      env:
+        BSE_API_URL: ${{ secrets.BSE_API_URL }}
+        BSE_PDF_BASE_URL_LIVE: ${{ secrets.BSE_PDF_BASE_URL_LIVE }}
+        BSE_PDF_BASE_URL_HIST: ${{ secrets.BSE_PDF_BASE_URL_HIST }}
+        CEREBRAS_API_KEY: ${{ secrets.CEREBRAS_API_KEY }}
+        CEREBRAS_MODEL: ${{ secrets.CEREBRAS_MODEL }}
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        TELEGRAM_BOT_TOKEN_2: ${{ secrets.TELEGRAM_BOT_TOKEN_2 }}
+        TELEGRAM_CHAT_ID_2: ${{ secrets.TELEGRAM_CHAT_ID_2 }}
+        MIN_MKCAP: ${{ secrets.MIN_MKCAP }}
+        MAX_MKCAP: ${{ secrets.MAX_MKCAP }}
+        POLL_INTERVAL: ${{ secrets.POLL_INTERVAL }}
+      run: python orders.py
