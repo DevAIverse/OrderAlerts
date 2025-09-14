@@ -120,7 +120,10 @@ def fetch_bse_announcements():
         }
 
         try:
+            print(f"🌐 API Call: BSE Announcements - Page {page}")
+            print(f"🌐 URL: {BSE_API_URL}")
             resp = requests.get(BSE_API_URL, headers=headers, params=params, timeout=10)
+            print(f"🌐 BSE API Response: {resp.status_code}")
             if resp.status_code == 404:
                 break  # No more pages available
             resp.raise_for_status()
@@ -157,11 +160,14 @@ def extract_pdf_text(pdf_filename):
         pdf_url = f"{base_url}{pdf_filename}"
         
         try:
+            print(f"🌐 API Call: PDF Download")
+            print(f"🌐 URL: {pdf_url}")
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
                 "Referer": "https://www.bseindia.com/"
             }
             resp = requests.get(pdf_url, headers=headers, timeout=30)
+            print(f"🌐 PDF API Response: {resp.status_code}")
             
             if resp.status_code == 200:
                 # Extract text using PyPDF2
@@ -195,27 +201,37 @@ def search_nse_symbol(company_name):
         "Referer": "https://www.nseindia.com/"
     }
     try:
+        print(f"🌐 API Call: NSE Symbol Search")
+        print(f"🌐 URL: {url}")
         resp = requests.get(url, headers=headers)
+        print(f"🌐 NSE API Response: {resp.status_code}")
         if resp.status_code != 200:
+            print(f"❌ NSE API failed with status: {resp.status_code}")
             return None
         data = resp.json()
         symbols = data.get("symbols", [])
+        print(f"🌐 NSE API returned {len(symbols)} symbols")
         for s in symbols:
             if s.get("result_sub_type") == "equity":
+                print(f"✅ Found NSE equity symbol: {s.get('symbol')}")
                 return s.get("symbol")
-    except:
+    except Exception as e:
+        print(f"❌ NSE API Exception: {e}")
         pass
     return None
 
 def get_financials(symbol):
     try:
+        print(f"🌐 API Call: Yahoo Finance for {symbol}")
         stock = yf.Ticker(symbol)
         info = stock.info
+        print(f"🌐 Yahoo Finance Response: Got {len(info)} fields")
         mkcap = info.get("marketCap", 0) / 1e7  # in crores
         revenue = info.get("totalRevenue", 0) / 1e7  # in crores
+        print(f"✅ Yahoo Finance Success: MarketCap={mkcap:.0f}Cr, Revenue={revenue:.0f}Cr")
         return mkcap, revenue
     except Exception as e:
-        print(f"❌ Error fetching financials for {symbol}: {e}")
+        print(f"❌ Yahoo Finance Exception for {symbol}: {e}")
         return None, None
 
 def call_cerebras_api(user_prompt, timeout=10):
@@ -235,19 +251,23 @@ def call_cerebras_api(user_prompt, timeout=10):
     }
     
     try:
+        print(f"🌐 API Call: Cerebras AI")
+        print(f"🌐 URL: https://api.cerebras.ai/v1/chat/completions")
         response = requests.post(
             "https://api.cerebras.ai/v1/chat/completions",
             headers=headers,
             json=payload,
             timeout=timeout
         )
+        print(f"🌐 Cerebras API Response: {response.status_code}")
         response.raise_for_status()
         result = response.json()
         content = result["choices"][0]["message"]["content"]
         tokens_used = result.get("usage", {}).get("total_tokens", 0)
+        print(f"✅ Cerebras AI Success: {tokens_used} tokens used")
         return content, tokens_used
     except Exception as e:
-        print(f"❌ Error calling Cerebras API: {e}")
+        print(f"❌ Cerebras AI Exception: {e}")
         return None, 0
 
 def send_telegram_alert(message):
@@ -257,20 +277,30 @@ def send_telegram_alert(message):
     url1 = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     data1 = {"chat_id": TELEGRAM_CHAT_ID, "text": message}
     try:
+        print(f"🌐 API Call: Telegram Bot 1")
+        print(f"🌐 URL: {url1}")
         resp1 = requests.post(url1, data=data1)
+        print(f"🌐 Telegram Bot 1 Response: {resp1.status_code}")
         if resp1.status_code == 200:
             success_count += 1
-    except:
+            print(f"✅ Telegram Bot 1 Success")
+    except Exception as e:
+        print(f"❌ Telegram Bot 1 Exception: {e}")
         pass
     
     # Send to second bot
     url2 = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN_2}/sendMessage"
     data2 = {"chat_id": TELEGRAM_CHAT_ID_2, "text": message}
     try:
+        print(f"🌐 API Call: Telegram Bot 2")
+        print(f"🌐 URL: {url2}")
         resp2 = requests.post(url2, data=data2)
+        print(f"🌐 Telegram Bot 2 Response: {resp2.status_code}")
         if resp2.status_code == 200:
             success_count += 1
-    except:
+            print(f"✅ Telegram Bot 2 Success")
+    except Exception as e:
+        print(f"❌ Telegram Bot 2 Exception: {e}")
         pass
     
     return success_count > 0
