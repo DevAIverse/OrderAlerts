@@ -280,122 +280,121 @@ def send_telegram_alert(message):
 if __name__ == "__main__":
     processed_announcements = load_processed()
     
-    while True:
-        announcements = fetch_bse_announcements()
+    # Run once - no infinite loop
+    announcements = fetch_bse_announcements()
+    
+    print(f"📰 Found {len(announcements)} announcements ")
+    
+    for i, ann in enumerate(announcements):
+        # Debug: Print first announcement structure
+        if i == 0:
+            print(f"📋 Sample announcement keys: {list(ann.keys())}")
         
-        print(f"📰 Found {len(announcements)} announcements ")
+        sc_code = ann.get("SCRIP_CD")
+        company_name = ann.get("SLONGNAME")
+        ann_date = ann.get("DT_TM", "")
+        print(company_name)
+        ann_id = ann.get("NEWSID", "")
         
-        for i, ann in enumerate(announcements):
-            # Debug: Print first announcement structure
-            if i == 0:
-                print(f"📋 Sample announcement keys: {list(ann.keys())}")
+        # Skip if essential data is missing
+        if not sc_code or not company_name:
+            print(f"⚠️ Skipping announcement {i+1}: Missing SCRIP_CD or SLONGNAME")
+            continue
             
-            sc_code = ann.get("SCRIP_CD")
-            company_name = ann.get("SLONGNAME")
-            ann_date = ann.get("DT_TM", "")
-            print(company_name)
-            ann_id = ann.get("NEWSID", "")
-            
-            # Skip if essential data is missing
-            if not sc_code or not company_name:
-                print(f"⚠️ Skipping announcement {i+1}: Missing SCRIP_CD or SLONGNAME")
-                continue
-                
-            unique_id = f"{sc_code}_{ann_id}"
-            
-            if unique_id in processed_announcements:
-                print(f"⏭️ Skipping already processed: {company_name}")
-                continue
-            
-            pdf_link = ann.get("ATTACHMENTNAME")
-            print(f"🔍 Processing: {company_name} ({sc_code})")
-            
-            # Search for NSE symbol using company name
-            nse_symbol = search_nse_symbol(company_name)
-            
-            mkcap, revenue = None, None
-            if nse_symbol:
-                ticker_nse = f"{nse_symbol}.NS"
-                print(f"🔍 Found NSE symbol: {nse_symbol}")
-                mkcap, revenue = get_financials(ticker_nse)
-            
-            # Fallback to BSE code if NSE search failed
+        unique_id = f"{sc_code}_{ann_id}"
+        
+        if unique_id in processed_announcements:
+            print(f"⏭️ Skipping already processed: {company_name}")
+            continue
+        
+        pdf_link = ann.get("ATTACHMENTNAME")
+        print(f"🔍 Processing: {company_name} ({sc_code})")
+        
+        # Search for NSE symbol using company name
+        nse_symbol = search_nse_symbol(company_name)
+        
+        mkcap, revenue = None, None
+        if nse_symbol:
+            ticker_nse = f"{nse_symbol}.NS"
+            print(f"🔍 Found NSE symbol: {nse_symbol}")
+            mkcap, revenue = get_financials(ticker_nse)
+        
+        # Fallback to BSE code if NSE search failed
+        if not mkcap:
+            ticker_ns = f"{sc_code}.NS"
+            ticker_bo = f"{sc_code}.BO"
+            mkcap, revenue = get_financials(ticker_ns)
             if not mkcap:
-                ticker_ns = f"{sc_code}.NS"
-                ticker_bo = f"{sc_code}.BO"
-                mkcap, revenue = get_financials(ticker_ns)
-                if not mkcap:
-                    mkcap, revenue = get_financials(ticker_bo)
-            
-            if not mkcap:
-                print(f"❌ No market cap data for {company_name}, skipping")
-                processed_announcements.append(unique_id)
-                continue
-            if mkcap < MIN_MKCAP or mkcap > MAX_MKCAP:
-                print(f"❌ Market cap {mkcap:.0f} Cr outside range for {company_name}, skipping")
-                processed_announcements.append(unique_id)
-                continue
-            if revenue < 10:
-                print(f"❌ Revenue {revenue:.1f} Cr too low for {company_name}, skipping")
-                processed_announcements.append(unique_id)
-                continue
-            
-            print(f"✅ {company_name}: MarketCap={mkcap:.0f} Cr, Revenue={revenue:.0f} Cr")
-            
-            # Extract actual PDF text
-            print(f"📄 Extracting PDF: {pdf_link}")
-            pdf_text = extract_pdf_text(pdf_link)
-            print(f"📄 PDF Text Length: {len(pdf_text)} chars")
-            print(f"📄 PDF Preview: {pdf_text[:200]}...")
-            
-            # Round values for AI analysis
-            mkcap_rounded = round(mkcap)
-            revenue_rounded = round(revenue)
-            
-            # Build prompt for AI
-            user_prompt = f"""
-                PDF Text:
-                {pdf_text}
-
-                Additional Context:
-                Revenue: {revenue_rounded} crores
-                MarketCap: {mkcap_rounded} crores
-            """
-            response, tokens_used = call_cerebras_api(user_prompt)
-            
-            telegram_sent = False
-            impact_value = "UNKNOWN"
-            ai_note = response if response else ""
-            
-            if response:
-                try:
-                    parsed = json.loads(response)
-                    impact_note = parsed.get("impact_note", "")
-                    impact_value = "BIG" if "BIG" in impact_note.upper() else "MEDIUM" if "MEDIUM" in impact_note.upper() else "SMALL"
-                    
-                    # Send Telegram only if BIG
-                    if impact_value == "BIG":
-                        message = f"📋 ORDER ALERT\n\n📈 {company_name}\n📅 {ann_date}\n\n{impact_note}\n\n💰 Revenue: {revenue_rounded} Cr\n🏢 Market Cap: {mkcap_rounded} Cr"
-                        telegram_sent = send_telegram_alert(message)
-                        print(f"📢 TELEGRAM SENT: {company_name} - {impact_value}")
-                    else:
-                        print(f"🔕 No telegram (Impact: {impact_value}) for {company_name}")
-                    
-                    print(f"✅ Processed {company_name}, Impact: {impact_value}, Tokens: {tokens_used}, Telegram sent: {telegram_sent}")
-                
-                except:
-                    print(f"⚠️ {company_name} Raw AI Response: {response}")
-            
-            # Update processed and log
+                mkcap, revenue = get_financials(ticker_bo)
+        
+        if not mkcap:
+            print(f"❌ No market cap data for {company_name}, skipping")
             processed_announcements.append(unique_id)
-            log_ai_output(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                          company_name, sc_code, impact_value, telegram_sent, ai_note, tokens_used)
-            
-            # Save processed immediately to avoid reprocessing on crash
-            save_processed(processed_announcements)
-
-            # 1 second delay between announcements
-            time.sleep(0.5)
+            continue
+        if mkcap < MIN_MKCAP or mkcap > MAX_MKCAP:
+            print(f"❌ Market cap {mkcap:.0f} Cr outside range for {company_name}, skipping")
+            processed_announcements.append(unique_id)
+            continue
+        if revenue < 10:
+            print(f"❌ Revenue {revenue:.1f} Cr too low for {company_name}, skipping")
+            processed_announcements.append(unique_id)
+            continue
         
-        print(f"⏱ Sleeping for {POLL_INTERVAL} seconds...\n")
-        time.sleep(POLL_INTERVAL)
+        print(f"✅ {company_name}: MarketCap={mkcap:.0f} Cr, Revenue={revenue:.0f} Cr")
+        
+        # Extract actual PDF text
+        print(f"📄 Extracting PDF: {pdf_link}")
+        pdf_text = extract_pdf_text(pdf_link)
+        print(f"📄 PDF Text Length: {len(pdf_text)} chars")
+        print(f"📄 PDF Preview: {pdf_text[:200]}...")
+        
+        # Round values for AI analysis
+        mkcap_rounded = round(mkcap)
+        revenue_rounded = round(revenue)
+        
+        # Build prompt for AI
+        user_prompt = f"""
+            PDF Text:
+            {pdf_text}
+
+            Additional Context:
+            Revenue: {revenue_rounded} crores
+            MarketCap: {mkcap_rounded} crores
+        """
+        response, tokens_used = call_cerebras_api(user_prompt)
+        
+        telegram_sent = False
+        impact_value = "UNKNOWN"
+        ai_note = response if response else ""
+        
+        if response:
+            try:
+                parsed = json.loads(response)
+                impact_note = parsed.get("impact_note", "")
+                impact_value = "BIG" if "BIG" in impact_note.upper() else "MEDIUM" if "MEDIUM" in impact_note.upper() else "SMALL"
+                
+                # Send Telegram for BIG and MEDIUM
+                if impact_value in ["BIG", "MEDIUM"]:
+                    message = f"📋 ORDER ALERT\n\n📈 {company_name}\n📅 {ann_date}\n\n{impact_note}\n\n💰 Revenue: {revenue_rounded} Cr\n🏢 Market Cap: {mkcap_rounded} Cr"
+                    telegram_sent = send_telegram_alert(message)
+                    print(f"📢 TELEGRAM SENT: {company_name} - {impact_value}")
+                else:
+                    print(f"🔕 No telegram (Impact: {impact_value}) for {company_name}")
+                
+                print(f"✅ Processed {company_name}, Impact: {impact_value}, Tokens: {tokens_used}, Telegram sent: {telegram_sent}")
+            
+            except:
+                print(f"⚠️ {company_name} Raw AI Response: {response}")
+        
+        # Update processed and log
+        processed_announcements.append(unique_id)
+        log_ai_output(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                      company_name, sc_code, impact_value, telegram_sent, ai_note, tokens_used)
+        
+        # Save processed immediately to avoid reprocessing on crash
+        save_processed(processed_announcements)
+
+        # 1 second delay between announcements
+        time.sleep(0.5)
+    
+    print(f"✅ Completed processing {len(announcements)} announcements")
